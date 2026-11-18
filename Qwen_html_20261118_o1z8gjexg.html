@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hẹn giờ đếm ngược · Báo mốc</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0b1020; --card:rgba(255,255,255,.06); --line:rgba(255,255,255,.12);
+    --txt:#e8eefc; --muted:#93a1c0; --acc:#38bdf8; --acc2:#22d3ee; --warn:#fb7185; --ok:#34d399;
+  }
+  body{
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    background:radial-gradient(1000px 600px at 15% -10%,#1e293b,transparent),
+               radial-gradient(800px 500px at 100% 0,#0e7490,transparent),var(--bg);
+    color:var(--txt);min-height:100vh;padding:24px 16px 60px;
+  }
+  .app{max-width:620px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+  header{text-align:center;margin-bottom:4px}
+  h1{font-size:clamp(20px,4vw,28px)}
+  .sub{color:var(--muted);font-size:14px;margin-top:6px;line-height:1.5}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;
+        backdrop-filter:blur(8px)}
+  h2{font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:12px}
+
+  /* ---- Đồng hồ ---- */
+  .timer-card{display:flex;flex-direction:column;align-items:center;gap:14px;transition:.3s}
+  .timer-card.flash{box-shadow:0 0 0 3px var(--acc2),0 0 40px rgba(34,211,238,.45)}
+  .timer-card.done{box-shadow:0 0 0 3px var(--warn),0 0 40px rgba(251,113,133,.4)}
+  .ring-wrap{position:relative;width:min(280px,78vw);aspect-ratio:1}
+  .ring{width:100%;height:100%;transform:rotate(-90deg)}
+  .ring circle{fill:none;stroke-width:12;stroke-linecap:round}
+  .ring-bg{stroke:rgba(255,255,255,.08)}
+  .ring-fg{stroke:url(#g);transition:stroke-dashoffset .1s linear}
+  .time-box{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .time{font-family:ui-monospace,"SF Mono",Consolas,monospace;font-size:clamp(38px,11vw,54px);
+        font-weight:700;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+  .tenth{font-size:.45em;color:var(--muted)}
+  .status{color:var(--muted);font-size:13px;margin-top:6px}
+  .urgent .time{color:var(--warn)}
+  .next{font-size:13px;color:var(--acc2);min-height:18px;text-align:center}
+
+  /* ---- Controls ---- */
+  .controls{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;width:100%}
+  .btn{border:1px solid var(--line);background:rgba(255,255,255,.07);color:var(--txt);
+       padding:12px 20px;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;transition:.15s}
+  .btn:hover{background:rgba(255,255,255,.14)}
+  .btn:active{transform:scale(.97)}
+  .btn.primary{background:linear-gradient(135deg,var(--acc),var(--acc2));border:0;color:#04202b;flex:1;min-width:150px}
+  .btn.small{padding:10px 14px;font-size:14px}
+  .btn.ghost{background:transparent}
+
+  /* ---- Form ---- */
+  .row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+  .field{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted);flex:1}
+  input,select{background:rgba(0,0,0,.3);border:1px solid var(--line);color:var(--txt);
+       padding:11px 12px;border-radius:10px;font-size:16px;width:100%;font-family:inherit}
+  input:focus,select:focus{outline:2px solid var(--acc);outline-offset:1px}
+  input:disabled{opacity:.45;cursor:not-allowed}
+  input[type=range]{padding:0;height:26px;background:none;border:0}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .chip{border:1px dashed var(--line);background:transparent;color:var(--muted);
+        padding:7px 13px;border-radius:999px;font-size:13px;cursor:pointer}
+  .chip:hover{color:var(--txt);border-color:var(--acc)}
+  .hint{font-size:12.5px;color:var(--muted);margin-top:10px;line-height:1.6}
+  .err{color:var(--warn);font-size:13px;margin-top:8px;min-height:16px}
+
+  /* ---- Danh sách mốc ---- */
+  .marks{list-style:none;margin-top:14px;display:flex;flex-direction:column;gap:8px}
+  .mark{display:flex;align-items:center;gap:12px;background:rgba(0,0,0,.25);
+        border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+  .mark.next-up{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset}
+  .mark.done{opacity:.65;border-color:var(--ok)}
+  .mark-time{font-family:ui-monospace,monospace;font-size:18px;font-weight:700;min-width:70px}
+  .mark-sub{font-size:12px;color:var(--muted);flex:1}
+  .mark-state{font-size:12px;color:var(--muted)}
+  .mark.done .mark-state{color:var(--ok)}
+  .x{background:none;border:0;color:var(--muted);font-size:16px;cursor:pointer;padding:4px 6px}
+  .x:hover{color:var(--warn)}
+  .empty{color:var(--muted);font-size:13px;text-align:center;padding:10px}
+  label.check{display:flex;align-items:center;gap:9px;font-size:14px;color:var(--muted);margin-top:14px;cursor:pointer}
+  label.check input{width:18px;height:18px;accent-color:var(--acc)}
+  footer{text-align:center;color:var(--muted);font-size:12px;margin-top:6px}
+
+  .toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,90px);
+    background:linear-gradient(135deg,var(--acc),var(--acc2));color:#04202b;font-weight:700;
+    padding:13px 24px;border-radius:999px;opacity:0;transition:.35s;pointer-events:none;z-index:9}
+  .toast.show{transform:translate(-50%,0);opacity:1}
+</style>
+</head>
+<body>
+<main class="app">
+  <header>
+    <h1>⏱️ Hẹn giờ đếm ngược</h1>
+    <p class="sub">Đặt mốc báo (VD: 30s) → khi đồng hồ chạm mốc sẽ <b>“tít” 1 tiếng</b>,<br>thời gian vẫn tiếp tục chạy về 0.</p>
+  </header>
+
+  <!-- ĐỒNG HỒ -->
+  <section class="card timer-card" id="timerCard">
+    <div class="ring-wrap">
+      <svg class="ring" viewBox="0 0 260 260">
+        <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#22d3ee"/>
+        </linearGradient></defs>
+        <circle class="ring-bg" cx="130" cy="130" r="118"/>
+        <circle class="ring-fg" id="ringFg" cx="130" cy="130" r="118"/>
+      </svg>
+      <div class="time-box">
+        <div class="time"><span id="timeMain">01:00</span><span class="tenth" id="timeTenth">.0</span></div>
+        <div class="status" id="status">Sẵn sàng</div>
+      </div>
+    </div>
+    <div class="next" id="nextInfo"></div>
+    <div class="controls">
+      <button class="btn primary" id="btnStart">▶ Bắt đầu</button>
+      <button class="btn" id="btnReset">↺ Đặt lại</button>
+      <button class="btn ghost" id="btnPlus">+1 phút</button>
+    </div>
+  </section>
+
+  <!-- THỜI GIAN -->
+  <section class="card">
+    <h2>1 · Thời gian hẹn</h2>
+    <div class="row">
+      <label class="field"><span>Phút</span><input id="inpMin" type="number" min="0" max="999" value="1"></label>
+      <label class="field"><span>Giây</span><input id="inpSec" type="number" min="0" max="59" value="0"></label>
+    </div>
+    <div class="chips" id="timePresets">
+      <button class="chip" data-sec="30">30 giây</button>
+      <button class="chip" data-sec="60">1 phút</button>
+      <button class="chip" data-sec="180">3 phút</button>
+      <button class="chip" data-sec="300">5 phút</button>
+      <button class="chip" data-sec="600">10 phút</button>
+    </div>
+  </section>
+
+  <!-- MỐC BÁO -->
+  <section class="card">
+    <h2>2 · Mốc báo “tít”</h2>
+    <div class="row">
+      <label class="field"><span>Báo khi còn lại (giây hoặc mm:ss)</span>
+        <input id="inpMark" type="text" inputmode="numeric" placeholder="VD: 30 hoặc 1:30">
+      </label>
+      <button class="btn primary small" id="btnAddMark" style="flex:0 0 auto">+ Thêm mốc</button>
+    </div>
+    <div class="chips" id="markPresets">
+      <button class="chip" data-sec="5">+ 5s</button>
+      <button class="chip" data-sec="10">+ 10s</button>
+      <button class="chip" data-sec="30">+ 30s</button>
+      <button class="chip" data-sec="60">+ 1 phút</button>
+      <button class="chip" data-sec="300">+ 5 phút</button>
+    </div>
+    <p class="hint">💡 Mốc = <b>số giây còn lại</b> lúc muốn nghe chuông. Ví dụ hẹn 1 phút + mốc 30 → đúng lúc đồng hồ chỉ 00:30 sẽ tít một tiếng rồi chạy tiếp. Thêm được nhiều mốc (30s, 10s, 5s…).</p>
+    <ul class="marks" id="markList"></ul>
+    <p class="err" id="markErr"></p>
+  </section>
+
+  <!-- ÂM THANH -->
+  <section class="card">
+    <h2>3 · Âm thanh</h2>
+    <div class="row">
+      <label class="field"><span>Kiểu tiếng báo mốc</span>
+        <select id="selSound">
+          <option value="tit">Tít (1 tiếng)</option>
+          <option value="bip">Bíp đôi</option>
+          <option value="chuong">Chuông ngân</option>
+          <option value="tram">Tít trầm</option>
+        </select>
+      </label>
+      <label class="field"><span>Âm lượng: <b id="volLabel">60%</b></span>
+        <input id="rngVol" type="range" min="0" max="100" value="60">
+      </label>
+      <button class="btn small" id="btnTest" style="flex:0 0 auto">🔊 Nghe thử</button>
+    </div>
+    <label class="check"><input type="checkbox" id="chkLoop"> Lặp lại chuông khi về 0 (bấm nút bất kỳ để tắt)</label>
+  </section>
+
+  <footer>Phím tắt: <b>Space</b> chạy / tạm dừng · <b>R</b> đặt lại</footer>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   TRẠNG THÁI
+   ========================================================= */
+const $ = s => document.querySelector(s);
+const CIRC = 2 * Math.PI * 118;
+
+const state = {
+  totalMs : 60000,   // tổng thời gian hẹn
+  remainMs: 60000,   // thời gian còn lại
+  running : false,
+  endAt   : 0,       // mốc performance.now() sẽ về 0
+  marks   : [],      // {id, sec, fired, el, stateEl}
+  sound   : 'tit',
+  volume  : 0.6
+};
+let tickId = null, alarmId = null, uid = 0, wakeLock = null;
+
+/* =========================================================
+   ÂM THANH — Web Audio API (không cần file mp3)
+   Lên lịch bằng audio clock => KHÔNG chặn luồng đếm ngược.
+   ========================================================= */
+let ac = null;
+function audio(){
+  if(!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+  if(ac.state === 'suspended') ac.resume();      // mở khoá trên iOS/Android
+  return ac;
+}
+function tone(freq, delay, dur, type='square', vol=state.volume){
+  const ctx = audio(), t0 = ctx.currentTime + delay;
+  const osc = ctx.createOscillator(), g = ctx.createGain();
+  osc.type = type; osc.frequency.setValueAtTime(freq, t0);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0001, vol), t0 + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  osc.connect(g).connect(ctx.destination);
+  osc.start(t0); osc.stop(t0 + dur + 0.03);
+}
+function playMark(){                              // tiếng báo tại mốc: 1 tiếng "tít"
+  switch(state.sound){
+    case 'bip':    tone(1050,0,.08); tone(1050,.13,.08); break;
+    case 'chuong': tone(880,0,.55,'sine'); tone(1320,0,.55,'sine',state.volume*.45); break;
+    case 'tram':   tone(440,0,.25,'triangle'); break;
+    default:       tone(1320,0,.13,'square');     // "tít"
+  }
+}
+function playEnd(){                               // chuông hết giờ
+  for(let i=0;i<3;i++) tone(1200, i*.22, .14,'square');
+  tone(1650, .72, .35,'square');
+}
+
+/* =========================================================
+   TIỆN ÍCH
+   ========================================================= */
+function fmt(ms){
+  const t = Math.max(0, ms), s = Math.floor(t/1000);
+  const h = Math.floor(s/3600), m = Math.floor(s%3600/60), ss = s%60;
+  const p = n => String(n).padStart(2,'0');
+  return h > 0 ? `${h}:${p(m)}:${p(ss)}` : `${p(m)}:${p(ss)}`;
+}
+function secLabel(sec){
+  const m = Math.floor(sec/60), s = +(sec%60).toFixed(1);
+  return m ? `${m} phút${s ? ' ' + s + 's' : ''}` : `${s} giây`;
+}
+/* Chấp nhận: "30", "1:30", "1m30", "90s" */
+function parseSeconds(str){
+  str = String(str).trim().toLowerCase().replace(/\s+/g,'');
+  if(!str) return NaN;
+  if(/^\d+(\.\d+)?$/.test(str)) return parseFloat(str);
+  if(str.includes(':')){
+    const p = str.split(':').map(Number);
+    if(p.some(n => !isFinite(n) || n < 0)) return NaN;
+    return p.reduce((a,b) => a*60 + b, 0);
+  }
+  const m = str.match(/(\d+)(?:m|p|phút|ph)/), s = str.match(/(\d+)(?:s|g|giây)/);
+  if(m || s) return (m ? +m[1]*60 : 0) + (s ? +s[1] : 0);
+  return NaN;
+}
+let toastTimer;
+function toast(msg){
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+/* =========================================================
+   VÒNG LẶP ĐẾM NGƯỢC — dùng đồng hồ thật, không cộng dồn sai số
+   ========================================================= */
+function tick(){
+  state.remainMs = Math.max(0, state.endAt - performance.now());
+  checkMarks();
+  render();
+  if(state.remainMs <= 0) finish();
+}
+function checkMarks(){
+  state.marks.forEach(m => {
+    if(!m.fired && state.remainMs > 0 && state.remainMs <= m.sec*1000){
+      m.fired = true;
+      playMark();                                  // ← kêu 1 tiếng, KHÔNG dừng đồng hồ
+      toast(`🔔 Còn ${secLabel(m.sec)}!`);
+      const c = $('#timerCard');
+      c.classList.remove('flash'); void c.offsetWidth; c.classList.add('flash');
+      setTimeout(() => c.classList.remove('flash'), 600);
+    }
+  });
+}
+
+/* =========================================================
+   ĐIỀU KHIỂN
+   ========================================================= */
+function start(){
+  audio();
+  if(state.remainMs <= 0){ state.remainMs = state.totalMs; state.marks.forEach(m => m.fired = false); }
+  state.endAt   = performance.now() + state.remainMs;
+  state.running = true;
+  clearInterval(tickId); tickId = setInterval(tick, 50);
+  keepAwake(true);
+  render();
+}
+function pause(){
+  state.running = false;
+  clearInterval(tickId); tickId = null;
+  state.remainMs = Math.max(0, state.endAt - performance.now());
+  keepAwake(false);
+  render();
+}
+function reset(){
+  stopAlarm();
+  state.running = false; clearInterval(tickId); tickId = null;
+  state.remainMs = state.totalMs;
+  state.marks.forEach(m => m.fired = false);
+  keepAwake(false);
+  render();
+}
+function finish(){
+  clearInterval(tickId); tickId = null;
+  state.running = false; state.remainMs = 0;
+  state.marks.forEach(m => m.fired = true);
+  playEnd();
+  $('#timerCard').classList.add('done');
+  toast('⏰ Hết giờ!');
+  if($('#chkLoop').checked) alarmId = setInterval(playEnd, 2000);
+  keepAwake(false);
+  render();
+}
+function stopAlarm(){ clearInterval(alarmId); alarmId = null; $('#timerCard').classList.remove('done'); }
+function toggle(){ stopAlarm(); state.running ? pause() : start(); }
+
+async function keepAwake(on){                     // giữ màn hình sáng (nếu hỗ trợ)
+  try{
+    if(on && 'wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+    else if(wakeLock){ wakeLock.release(); wakeLock = null; }
+  }catch(e){}
+}
+
+/* =========================================================
+   MỐC BÁO
+   ========================================================= */
+function addMark(sec){
+  const err = $('#markErr'); err.textContent = '';
+  if(!isFinite(sec) || sec <= 0){ err.textContent = '⚠️ Giá trị không hợp lệ. Nhập VD: 30 hoặc 1:30'; return; }
+  if(sec*1000 >= state.totalMs){ err.textContent = `⚠️ Mốc phải nhỏ hơn thời gian hẹn (${secLabel(state.totalMs/1000)}).`; return; }
+  if(state.marks.some(m => Math.abs(m.sec - sec) < .05)){ err.textContent = '⚠️ Mốc này đã có rồi.'; return; }
+
+  const m = { id:++uid, sec, fired:false };
+  // Nếu đang chạy mà mốc đã trôi qua thì đánh dấu "đã qua", không kêu bù
+  if(state.running && state.remainMs <= sec*1000) m.fired = true;
+  state.marks.push(m);
+  state.marks.sort((a,b) => b.sec - a.sec);       // mốc lớn nổ trước
+  renderMarks(); render();
+  $('#inpMark').value = '';
+}
+function removeMark(id){ state.marks = state.marks.filter(m => m.id !== id); renderMarks(); render(); }
+
+function renderMarks(){
+  const ul = $('#markList'); ul.innerHTML = '';
+  if(!state.marks.length){
+    ul.innerHTML = '<li class="empty">Chưa có mốc báo nào — thêm mốc 30s để thử nhé!</li>';
+    return;
+  }
+  state.marks.forEach(m => {
+    const li = document.createElement('li');
+    li.className = 'mark';
+    li.innerHTML = `<span class="mark-time">${fmt(m.sec*1000)}</span>
+                    <span class="mark-sub">Tít khi còn ${secLabel(m.sec)}</span>
+                    <span class="mark-state"></span>
+                    <button class="x" title="Xoá">✕</button>`;
+    li.querySelector('.x').onclick = () => removeMark(m.id);
+    m.el = li; m.stateEl = li.querySelector('.mark-state');
+    ul.appendChild(li);
+  });
+}
+
+/* =========================================================
+   RENDER GIAO DIỆN
+   ========================================================= */
+function render(){
+  const r = state.remainMs, total = state.totalMs || 1;
+  $('#timeMain').textContent  = fmt(r);
+  $('#timeTenth').textContent = '.' + Math.floor((Math.max(0,r) % 1000) / 100);
+  $('#ringFg').style.strokeDasharray  = CIRC;
+  $('#ringFg').style.strokeDashoffset = CIRC * (1 - r/total);
+
+  const card = $('#timerCard');
+  card.classList.toggle('urgent', r > 0 && r <= 10000);
+
+  $('#status').textContent = r <= 0 ? '🔔 Hết giờ!'
+                    : state.running ? 'Đang chạy…'
+                    : (r < total ? 'Tạm dừng' : 'Sẵn sàng');
+
+  $('#btnStart').textContent = state.running ? '⏸ Tạm dừng'
+                    : (r > 0 && r < total ? '▶ Tiếp tục' : '▶ Bắt đầu');
+  $('#inpMin').disabled = $('#inpSec').disabled = state.running;
+
+  // mốc sắp tới = mốc chưa báo, lớn nhất nhưng vẫn <= thời gian còn lại
+  const next = state.marks.filter(m => !m.fired && m.sec*1000 <= r).sort((a,b) => b.sec - a.sec)[0];
+  $('#nextInfo').textContent = state.marks.length
+      ? (next ? `🔔 Mốc kế tiếp: ${fmt(next.sec*1000)} (sau ${Math.ceil((r - next.sec*1000)/1000)}s nữa)`
+              : '✅ Đã báo hết các mốc')
+      : 'Chưa đặt mốc báo nào';
+
+  state.marks.forEach(m => {
+    if(!m.el) return;
+    m.el.classList.toggle('done', m.fired);
+    m.el.classList.toggle('next-up', m === next);
+    m.stateEl.textContent = m.fired ? '✓ Đã báo' : 'Chờ';
+  });
+
+  document.title = state.running ? `${fmt(r)} · Hẹn giờ` : 'Hẹn giờ đếm ngược · Báo mốc';
+}
+
+/* =========================================================
+   SỰ KIỆN
+   ========================================================= */
+function applyTimeInput(){
+  const m = Math.max(0, +$('#inpMin').value || 0);
+  const s = Math.min(59, Math.max(0, +$('#inpSec').value || 0));
+  state.totalMs = Math.max(1000, (m*60 + s) * 1000);
+  reset();
+}
+$('#inpMin').oninput = $('#inpSec').oninput = applyTimeInput;
+
+$('#timePresets').onclick = e => {
+  const b = e.target.closest('[data-sec]'); if(!b) return;
+  const sec = +b.dataset.sec;
+  $('#inpMin').value = Math.floor(sec/60); $('#inpSec').value = sec%60;
+  applyTimeInput();
+};
+$('#markPresets').onclick = e => {
+  const b = e.target.closest('[data-sec]'); if(b) addMark(+b.dataset.sec);
+};
+$('#btnAddMark').onclick = () => addMark(parseSeconds($('#inpMark').value));
+$('#inpMark').onkeydown  = e => { if(e.key === 'Enter') addMark(parseSeconds(e.target.value)); };
+
+$('#btnStart').onclick = toggle;
+$('#btnReset').onclick = () => { stopAlarm(); reset(); };
+$('#btnPlus').onclick  = () => {                 // cộng thêm 1 phút, mốc đã báo giữ nguyên
+  stopAlarm();
+  state.totalMs  += 60000;
+  state.remainMs += 60000;
+  if(state.running) state.endAt += 60000;
+  $('#inpMin').value = Math.floor(state.totalMs/60000);
+  $('#inpSec').value = Math.round(state.totalMs/1000) % 60;
+  render();
+};
+$('#selSound').onchange = e => { state.sound = e.target.value; playMark(); };
+$('#rngVol').oninput    = e => { state.volume = e.target.value/100; $('#volLabel').textContent = e.target.value + '%'; };
+$('#btnTest').onclick   = () => { audio(); playMark(); };
+
+document.addEventListener('keydown', e => {
+  if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
+  if(e.code === 'Space'){ e.preventDefault(); toggle(); }
+  if(e.key.toLowerCase() === 'r'){ stopAlarm(); reset(); }
+});
+// Quay lại tab: đồng bộ ngay với đồng hồ thật
+document.addEventListener('visibilitychange', () => { if(!document.hidden && state.running) tick(); });
+// Mở khoá audio ở thao tác đầu tiên (yêu cầu của trình duyệt mobile)
+['pointerdown','keydown'].forEach(ev => window.addEventListener(ev, () => audio(), { once:true }));
+
+/* KHỞI TẠO */
+renderMarks(); render();
+</script>
+</body>
+</html>
